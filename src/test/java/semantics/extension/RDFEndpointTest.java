@@ -7,16 +7,12 @@ import static org.neo4j.helpers.collection.Iterators.count;
 import static org.neo4j.server.ServerTestUtils.getSharedTestTemporaryFolder;
 import static semantics.RDFImport.PREFIX_SEPARATOR;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.CollectionType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.google.common.io.Resources;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -39,11 +35,6 @@ import semantics.RDFImportTest;
  * Created by jbarrasa on 14/09/2016.
  */
 public class RDFEndpointTest {
-
-  private static final ObjectMapper jsonMapper = new ObjectMapper();
-
-  private static final CollectionType collectionType = TypeFactory
-      .defaultInstance().constructCollectionType(Set.class, Map.class);
 
   @Test
   public void testGetNodeById() throws Exception {
@@ -1528,39 +1519,35 @@ public class RDFEndpointTest {
     try (ServerControls server = getServerBuilder()
         .withProcedure(RDFImport.class)
         .withExtension("/rdf", RDFEndpoint.class)
-        .withFixture(new Function<GraphDatabaseService, Void>() {
-          @Override
-          public Void apply(GraphDatabaseService graphDatabaseService) throws RuntimeException {
-            try (Transaction tx = graphDatabaseService.beginTx()) {
-              graphDatabaseService.execute("CREATE INDEX ON :Resource(uri)");
+        .withFixture(graphDatabaseService -> {
+          try (Transaction tx = graphDatabaseService.beginTx()) {
+            graphDatabaseService.execute("CREATE INDEX ON :Resource(uri)");
 
-              tx.success();
-            } catch (Exception e) {
-              e.printStackTrace();
-              fail(e.getMessage());
-            }
-            try (Transaction tx = graphDatabaseService.beginTx()) {
-              Result res = graphDatabaseService.execute("CALL semantics.importRDF('" +
+            tx.success();
+          } catch (Exception e) {
+            e.printStackTrace();
+            fail(e.getMessage());
+          }
+          try (Transaction tx = graphDatabaseService.beginTx();
+              Result ignored = graphDatabaseService.execute("CALL semantics.importRDF('" +
                   RDFImportTest.class.getClassLoader().getResource("customDataTypes.ttl")
                       .toURI()
                   + "','Turtle',{keepLangTag: true, handleVocabUris: 'SHORTEN', handleMultival: 'ARRAY', "
                   +
                   "multivalPropList: ['http://example.com/price', 'http://example.com/power', 'http://example.com/class'], "
                   +
-                  "keepCustomDataTypes: true, customDataTypedPropList: ['http://example.com/price', 'http://example.com/color']})");
-
-              tx.success();
-            } catch (Exception e) {
-              e.printStackTrace();
-              fail(e.getMessage());
-            }
-            return null;
+                  "keepCustomDataTypes: true, customDataTypedPropList: ['http://example.com/price', 'http://example.com/color']})")) {
+            tx.success();
+          } catch (Exception e) {
+            e.printStackTrace();
+            fail(e.getMessage());
           }
+          return null;
         })
         .newServer()) {
 
       Map<String, String> params = new HashMap<>();
-      params.put("cypher", "MATCH (a:ns0__Car) RETURN *");
+      params.put("cypher", "MATCH (a:ex__Car) RETURN *");
 
       HTTP.Response response = HTTP.withHeaders("Accept", "text/turtle").POST(
           HTTP.GET(server.httpURI().resolve("rdf").toString()).location() + "cypheronrdf", params);
