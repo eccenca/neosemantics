@@ -40,7 +40,7 @@ import semantics.mapping.MappingUtils;
  */
 public class RDFImportTest {
 
-  String jsonLdFragment = "{\n" +
+  private final String jsonLdFragment = "{\n" +
       "  \"@context\": {\n" +
       "    \"name\": \"http://xmlns.com/foaf/0.1/name\",\n" +
       "    \"knows\": \"http://xmlns.com/foaf/0.1/knows\",\n" +
@@ -64,14 +64,14 @@ public class RDFImportTest {
       "  ]\n" +
       "}";
 
-  String turtleFragment = "@prefix show: <http://example.org/vocab/show/> .\n" +
+  private final String turtleFragment = "@prefix show: <http://example.org/vocab/show/> .\n" +
       "\n" +
       "show:218 show:localName \"That Seventies Show\"@en .                 # literal with a language tag\n"
       +
       "show:218 show:localName \"Cette Série des Années Soixante-dix\"@fr . \n" +
       "show:218 show:localName \"Cette Série des Années Septante\"@fr-be .  # literal with a region subtag";
 
-  String wrongUriTtl = "@prefix pr: <http://example.org/vocab/show/> .\n" +
+  private final String wrongUriTtl = "@prefix pr: <http://example.org/vocab/show/> .\n" +
       "pr:ent" +
       "      pr:P854 <https://suasprod.noc-science.at/XLCubedWeb/WebForm/ShowReport.aspx?rep=004+studierende%2f001+universit%u00e4ten%2f003+studierende+nach+universit%u00e4ten.xml&toolbar=true> ;\n"
       +
@@ -214,7 +214,7 @@ public class RDFImportTest {
                   + "\nRETURN x.rdf" + PREFIX_SEPARATOR + "value AS datasetUrl").next()
               .get("datasetUrl").asString());
 
-      assertEquals("ns0",
+      assertEquals("dcat",
           session.run("MATCH (n:NamespacePrefixDefinition) \n" +
               "RETURN n.`http://www.w3.org/ns/dcat#` as prefix")
               .next().get("prefix").asString());
@@ -456,9 +456,9 @@ public class RDFImportTest {
       assertEquals(3, next.get("triplesLoaded").asInt());
 
       importResults1 = session.run(
-          "match (n:Resource) return n.ns0__localName as all, semantics.getLangValue('en',n.ns0__localName) as en_name, "
+          "match (n:Resource) return n.show__localName as all, semantics.getLangValue('en',n.show__localName) as en_name, "
               +
-              "semantics.getLangValue('fr',n.ns0__localName) as fr_name, semantics.getLangValue('fr-be',n.ns0__localName) as frbe_name");
+              "semantics.getLangValue('fr',n.show__localName) as fr_name, semantics.getLangValue('fr-be',n.show__localName) as frbe_name");
       next = importResults1.next();
       assertEquals("That Seventies Show", next.get("en_name").asString());
       assertEquals("Cette Série des Années Soixante-dix", next.get("fr_name").asString());
@@ -483,7 +483,7 @@ public class RDFImportTest {
       assertEquals(9, next.get("triplesLoaded").asInt());
 
       importResults1 = session.run(
-          "match (n:Resource) return n.ns0__localName as all, n.ns0__availableInLang as ail, n.ns0__showId as sid, n.ns0__producer as prod ");
+          "match (n:Resource) return n.show__localName as all, n.show__availableInLang as ail, n.show__showId as sid, n.show__producer as prod ");
       next = importResults1.next();
       List<String> localNames = new ArrayList<String>();
       localNames.add("That Seventies Show");
@@ -517,7 +517,7 @@ public class RDFImportTest {
       assertEquals(3, next.get("triplesLoaded").asInt());
 
       importResults1 = session.run(
-          "match (n:Resource) return n.ns0__localName as all, n.ns0__availableInLang as ail, n.ns0__showId as sid, n.ns0__producer as prod ");
+          "match (n:Resource) return n.show__localName as all, n.show__availableInLang as ail, n.show__showId as sid, n.show__producer as prod ");
       next = importResults1.next();
       assertTrue(next.get("all").isNull());
       assertTrue(next.get("ail").isNull());
@@ -1202,21 +1202,21 @@ public class RDFImportTest {
           +
           "handleVocabUris: 'SHORTEN', typesToLabels: true, commitSize: 500})");
       assertEquals(10L, importResults1.next().get("triplesLoaded").asLong());
-      StatementResult cars = session.run("MATCH (n:ns0__Car) " +
-          "\nRETURN n.ns0__price AS price," +
-          "n.ns0__power AS power, " +
-          "n.ns0__color AS color, " +
-          "n.ns0__class AS class, n.ns0__released AS released, " +
-          "n.ns0__type AS type ORDER BY price");
+      StatementResult cars = session.run("MATCH (n:ex__Car) " +
+          "\nRETURN n.ex__price AS price," +
+          "n.ex__power AS power, " +
+          "n.ex__color AS color, " +
+          "n.ex__class AS class, n.ex__released AS released, " +
+          "n.ex__type AS type ORDER BY price");
 
       Record car = cars.next();
       List price = car.get("price").asList();
       assertEquals(2, price.size());
-      assertEquals("10000^^ns0__EUR", price.get(0));
-      assertEquals("11000^^ns0__USD", price.get(1));
-      assertEquals("300^^ns0__HP", car.get("power").get(0).asString());
-      assertEquals("223,71^^ns0__kW", car.get("power").get(1).asString());
-      assertEquals("red^^ns0__Color", car.get("color").asString());
+      assertEquals("10000^^ex__EUR", price.get(0));
+      assertEquals("11000^^ex__USD", price.get(1));
+      assertEquals("300^^ex__HP", car.get("power").get(0).asString());
+      assertEquals("223,71^^ex__kW", car.get("power").get(1).asString());
+      assertEquals("red^^ex__Color", car.get("color").asString());
       assertEquals("A-Klasse@de", car.get("class").asList().get(0));
       assertEquals("A-Class@en", car.get("class").asList().get(1));
       assertEquals(2019, car.get("released").asLong());
@@ -1225,7 +1225,7 @@ public class RDFImportTest {
   }
 
   @Test
-  public void testImportMultiValAfterImportSingelVal() throws Exception {
+  public void testImportMultiValAfterImportSingleVal() throws Exception {
     try (Driver driver = GraphDatabase.driver(neo4j.boltURI(),
         Config.build().withEncryptionLevel(Config.EncryptionLevel.NONE).toConfig())) {
 
@@ -1309,8 +1309,8 @@ public class RDFImportTest {
               .toURI() + "','Turtle',{ handleMultival: 'ARRAY' })");
       assertEquals(2L, importResults1.next().get("triplesLoaded").asLong());
 
-      StatementResult result = session.run("MATCH (n:ns0__Thing) " +
-          "\nRETURN n.ns0__prop as multival ");
+      StatementResult result = session.run("MATCH (n:voc__Thing) " +
+          "\nRETURN n.voc__prop as multival ");
 
       List<String> vals = new ArrayList<String>();
       vals.add("one");
@@ -1418,8 +1418,8 @@ public class RDFImportTest {
               .toURI() + "','Turtle',{ handleMultival: 'ARRAY' })");
       assertEquals(2L, importResults1.next().get("triplesLoaded").asLong());
 
-      StatementResult result = session.run("MATCH (n:ns0__Thing) " +
-          "\nRETURN n.ns0__prop as multival ");
+      StatementResult result = session.run("MATCH (n:voc__Thing) " +
+          "\nRETURN n.voc__prop as multival ");
 
       List<String> vals = new ArrayList<String>();
       vals.add("one");
@@ -1447,8 +1447,8 @@ public class RDFImportTest {
               .toURI() + "','Turtle')");
       assertEquals(2L, importResults1.next().get("triplesLoaded").asLong());
 
-      StatementResult result = session.run("MATCH (n:ns0__Thing) " +
-          "\nRETURN n.ns0__prop as singleVal ");
+      StatementResult result = session.run("MATCH (n:voc__Thing) " +
+          "\nRETURN n.voc__prop as singleVal ");
 
       assertEquals(230L, result.next().get("singleVal").asLong());
 
@@ -1532,7 +1532,7 @@ public class RDFImportTest {
           + "OPTIONAL MATCH (n)-[r]->(m) "
           + "RETURN n.uri AS nUri, type(r) AS type, m.uri AS mUri");
       Record record = result.next();
-      assertEquals("ns0__Predicate3", record.get("type").asString());
+      assertEquals("ex__Predicate3", record.get("type").asString());
       assertEquals("http://example.org/Resource1", record.get("nUri").asString());
       assertEquals("http://example.org/Resource2", record.get("mUri").asString());
 
@@ -1604,7 +1604,7 @@ public class RDFImportTest {
 
       assertEquals(15L, importResults.next().get("triplesLoaded").asLong());
       StatementResult result = session.run("MATCH (n {uri: 'http://example.org/Resource1'})"
-          + "RETURN n.ns0__Predicate2 AS nP2");
+          + "RETURN n.ex__Predicate2 AS nP2");
 
       Record record = result.next();
       assertEquals(1, record.get("nP2").asList().size());
@@ -1617,7 +1617,7 @@ public class RDFImportTest {
       assertEquals(1L, deleteResults.next().get("triplesDeleted").asLong());
 
       result = session.run("MATCH (n {uri: 'http://example.org/Resource1'})"
-          + "RETURN n.ns0__Predicate2 AS nP2");
+          + "RETURN n.ex__Predicate2 AS nP2");
       record = result.next();
       assertEquals(NULL, record.get("nP2"));
 
@@ -2012,7 +2012,7 @@ public class RDFImportTest {
           + "','Turtle')");
       assertEquals(2L, importResults1.single().get("triplesLoaded").asLong());
       Record result = session.run(
-          "MATCH (n) RETURN n.ns0__reportedOn AS rep, n.`ns0__creation-date` AS cre")
+          "MATCH (n) RETURN n.exterms__reportedOn AS rep, n.`exterms__creation-date` AS cre")
           .next();
       assertEquals(LocalDateTime.parse("2012-12-31T23:57"),
           result.get("rep").asLocalDateTime());
@@ -2069,9 +2069,9 @@ public class RDFImportTest {
       expectedDatetimes.add(LocalDateTime.parse("2012-12-30T23:57:00"));
 
       Record result = session.run(
-          "MATCH (n) RETURN n.ns0__someDateValue as dates, n.ns0__someDateTimeValues as dateTimes")
+          "MATCH (n) RETURN n.exterms__someDateValue as dates, n.exterms__someDateTimeValues as dateTimes")
           .next();
-      Set<LocalDate> actualDates = new HashSet<LocalDate>();
+      Set<LocalDate> actualDates = new HashSet<>();
       result.get("dates").asList().forEach(x -> actualDates.add((LocalDate) x));
 
       Set<LocalDateTime> actualDateTimes = new HashSet<LocalDateTime>();

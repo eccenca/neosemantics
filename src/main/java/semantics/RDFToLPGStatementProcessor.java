@@ -274,6 +274,11 @@ abstract class RDFToLPGStatementProcessor extends ConfiguredStatementHandler {
   @Override
   public void handleNamespace(String prefix, String uri) throws RDFHandlerException {
 
+    if (!namespaces.containsKey(uri) &&
+        // skip the base uri prefix anti-pattern
+        !prefix.isEmpty()) {
+      namespaces.put(uri, prefix);
+    }
   }
 
   protected void addStatement(Statement st) {

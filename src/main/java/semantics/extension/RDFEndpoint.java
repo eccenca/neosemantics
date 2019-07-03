@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.StreamSupport;
@@ -150,18 +151,22 @@ public class RDFEndpoint {
             .readValue(body,
                 new TypeReference<Map<String, String>>() {
                 });
-        try (Transaction tx = gds.beginTx(); Result result = gds.execute(jsonMap.get("cypher"))) {
-          final boolean onlyMapped = jsonMap.containsKey("showOnlyMapped");
+        try (Transaction tx = gds.beginTx();
+            Result result = gds.execute(jsonMap.get("cypher"))) {
 
           Set<ContextResource> serializedNodes = new HashSet<ContextResource>();
           RDFWriter writer = Rio
               .createWriter(getFormat(acceptHeaderParam, jsonMap.get("format")),
                   outputStream);
           SimpleValueFactory valueFactory = SimpleValueFactory.getInstance();
+
           String baseVocabNS = "neo4j://vocabulary#";
           writer.handleNamespace("neovoc", baseVocabNS);
+          for (Map.Entry<String, String> namespace : namespaces.entrySet()) {
+            writer.handleNamespace(namespace.getValue(), namespace.getKey());
+          }
+
           writer.startRDF();
-          boolean doneOnce = false;
           while (result.hasNext()) {
             Map<String, Object> row = result.next();
             Set<Map.Entry<String, Object>> entries = row.entrySet();
@@ -202,6 +207,7 @@ public class RDFEndpoint {
             }
           }
           writer.endRDF();
+          tx.success();
         } catch (Exception e) {
           handleSerialisationError(outputStream, e, acceptHeaderParam, jsonMap.get("format"));
         }
@@ -344,67 +350,69 @@ public class RDFEndpoint {
       @QueryParam("excludeContext") String excludeContextParam,
       @QueryParam("format") String format,
       @HeaderParam("accept") String acceptHeaderParam) {
-    return Response.ok().entity(new StreamingOutput() {
-      @Override
-      public void write(OutputStream outputStream) throws IOException, WebApplicationException {
+    return Response.ok().entity((StreamingOutput) outputStream -> {
 
-        Map<String, String> namespaces = getNamespacesFromDB(gds);
-        String queryWithContext;
-        String queryNoContext;
-        Map<String, Object> params = new HashMap<>();
-        params.put("uri", uriParam);
-        if (graphUriParam == null || graphUriParam.equals("")) {
-          queryWithContext = "MATCH (x:Resource {uri:{uri}}) " +
-              "WHERE NOT EXISTS(x.graphUri)\n" +
-              "OPTIONAL MATCH (x)-[r]-(val:Resource) " +
-              "WHERE exists(val.uri)\n" +
-              "AND NOT EXISTS(val.graphUri)\n" +
-              "RETURN x, r, val.uri AS value";
+      Map<String, String> namespaces = getNamespacesFromDB(gds);
+      String queryWithContext;
+      String queryNoContext;
+      Map<String, Object> params = new HashMap<>();
+      params.put("uri", uriParam);
+      if (graphUriParam == null || graphUriParam.equals("")) {
+        queryWithContext = "MATCH (x:Resource {uri:{uri}}) " +
+            "WHERE NOT EXISTS(x.graphUri)\n" +
+            "OPTIONAL MATCH (x)-[r]-(val:Resource) " +
+            "WHERE exists(val.uri)\n" +
+            "AND NOT EXISTS(val.graphUri)\n" +
+            "RETURN x, r, val.uri AS value";
 
-          queryNoContext = "MATCH (x:Resource {uri:{uri}}) " +
-              "WHERE NOT EXISTS(x.graphUri)\n" +
-              "RETURN x, null AS r, null AS value";
-        } else {
-          queryWithContext = "MATCH (x:Resource {uri:{uri}, graphUri:{graphUri}}) " +
-              "OPTIONAL MATCH (x)-[r]-(val:Resource {graphUri:{graphUri}}) " +
-              "WHERE exists(val.uri)\n" +
-              "RETURN x, r, val.uri AS value";
+        queryNoContext = "MATCH (x:Resource {uri:{uri}}) " +
+            "WHERE NOT EXISTS(x.graphUri)\n" +
+            "RETURN x, null AS r, null AS value";
+      } else {
+        queryWithContext = "MATCH (x:Resource {uri:{uri}, graphUri:{graphUri}}) " +
+            "OPTIONAL MATCH (x)-[r]-(val:Resource {graphUri:{graphUri}}) " +
+            "WHERE exists(val.uri)\n" +
+            "RETURN x, r, val.uri AS value";
 
-          queryNoContext = "MATCH (x:Resource {uri:{uri}, graphUri:{graphUri}}) " +
-              "RETURN x, null AS r, null AS value";
-          params.put("graphUri", graphUriParam);
-        }
-        try (Transaction tx = gds.beginTx()) {
+        queryNoContext = "MATCH (x:Resource {uri:{uri}, graphUri:{graphUri}}) " +
+            "RETURN x, null AS r, null AS value";
+        params.put("graphUri", graphUriParam);
+      }
+      try (Transaction tx = gds.beginTx();
           Result result = gds
               .execute((excludeContextParam != null ? queryNoContext : queryWithContext),
-                  params);
+                  params)) {
 
-          RDFWriter writer = Rio.createWriter(getFormat(acceptHeaderParam, format), outputStream);
-          SimpleValueFactory valueFactory = SimpleValueFactory.getInstance();
-          String baseVocabNS = "neo4j://vocabulary#";
-          writer.handleNamespace("neovoc", baseVocabNS);
-          writer.startRDF();
-          boolean doneOnce = false;
-          while (result.hasNext()) {
-            Map<String, Object> row = result.next();
-            Node node = (Node) row.get("x");
-            if (!doneOnce) {
-              //Output only once the props of the selected node as literal properties
-              processNode(namespaces, writer, valueFactory, baseVocabNS, node);
-              doneOnce = true;
-            }
-            Relationship rel = (Relationship) row.get("r");
-            if (rel != null) {
-              processRelationship(namespaces, writer, valueFactory, baseVocabNS, rel);
-            }
-          }
-          writer.endRDF();
-          result.close();
-        } catch (Exception e) {
-          handleSerialisationError(outputStream, e, acceptHeaderParam, format);
+        RDFWriter writer = Rio.createWriter(getFormat(acceptHeaderParam, format), outputStream);
+        SimpleValueFactory valueFactory = SimpleValueFactory.getInstance();
+
+        String baseVocabNS = "neo4j://vocabulary#";
+        writer.handleNamespace("neovoc", baseVocabNS);
+        for (Map.Entry<String, String> namespace : namespaces.entrySet()) {
+          writer.handleNamespace(namespace.getValue(), namespace.getKey());
         }
 
+        writer.startRDF();
+        boolean doneOnce = false;
+        while (result.hasNext()) {
+          Map<String, Object> row = result.next();
+          Node node = (Node) row.get("x");
+          if (!doneOnce) {
+            //Output only once the props of the selected node as literal properties
+            processNode(namespaces, writer, valueFactory, baseVocabNS, node);
+            doneOnce = true;
+          }
+          Relationship rel = (Relationship) row.get("r");
+          if (rel != null) {
+            processRelationship(namespaces, writer, valueFactory, baseVocabNS, rel);
+          }
+        }
+        writer.endRDF();
+        tx.success();
+      } catch (Exception e) {
+        handleSerialisationError(outputStream, e, acceptHeaderParam, format);
       }
+
     }).build();
   }
 
@@ -418,28 +426,19 @@ public class RDFEndpoint {
     writer.endRDF();
   }
 
-  private Resource getResource(String s, ValueFactory vf) {
-    // taken from org.eclipse.rdf4j.model.impl.SimpleIRI
-    // explicit storage of blank nodes in the graph to be considered
-    if (s.indexOf(58) >= 0) {
-      return vf.createIRI(s);
-    } else {
-      return vf.createBNode(s);
-    }
-  }
-
   private Map<String, String> getNamespacesFromDB(GraphDatabaseService graphdb) {
 
-    Result nslist = graphdb.execute("MATCH (n:NamespacePrefixDefinition) \n" +
+    try (Result nslist = graphdb.execute("MATCH (n:NamespacePrefixDefinition) \n" +
         "UNWIND keys(n) AS namespace\n" +
-        "RETURN namespace, n[namespace] AS prefix");
+        "RETURN namespace, n[namespace] AS prefix")) {
 
-    Map<String, String> result = new HashMap<String, String>();
-    while (nslist.hasNext()) {
-      Map<String, Object> ns = nslist.next();
-      result.put((String) ns.get("namespace"), (String) ns.get("prefix"));
+      Map<String, String> result = new HashMap<String, String>();
+      while (nslist.hasNext()) {
+        Map<String, Object> ns = nslist.next();
+        result.put((String) ns.get("namespace"), (String) ns.get("prefix"));
+      }
+      return result;
     }
-    return result;
   }
 
   private String buildURI(String baseVocabNS, String name, Map<String, String> namespaces) {
@@ -480,14 +479,6 @@ public class RDFEndpoint {
     }
     throw new MissingNamespacePrefixDefinition("Prefix ".concat(prefix)
         .concat(" in use but not defined in the 'NamespacePrefixDefinition' node"));
-  }
-
-  private String getPrefix(String namespace, Map<String, String> namespaces) {
-    if (namespaces.containsKey(namespace)) {
-      return namespaces.get(namespace);
-    } else {
-      return namespace;
-    }
   }
 
   @GET
@@ -855,11 +846,11 @@ public class RDFEndpoint {
 
   }
 
-  private class MissingNamespacePrefixDefinition extends RDFHandlerException {
+private class MissingNamespacePrefixDefinition extends RDFHandlerException {
 
-    public MissingNamespacePrefixDefinition(
-        String msg) {
-      super("RDF Serialization ERROR: ".concat(msg));
-    }
+  public MissingNamespacePrefixDefinition(
+      String msg) {
+    super("RDF Serialization ERROR: ".concat(msg));
   }
+}
 }

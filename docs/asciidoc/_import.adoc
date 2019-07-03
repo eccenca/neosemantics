@@ -74,12 +74,20 @@ NSMNTX will import the RDF data and persist it into your Neo4j graph as the foll
 image::nsmntx-annotated.png[RDF data imported in Neo4j]
 
 
-The first thing we notice is that dataType properties in your RDF have been converted into node properties and object properties are now relationships connecting nodes. Every node represents a resource and has a property with its uri. Similarly, rdf:type statements are transformed into node labels. That's pretty much it but if you are interested, there is a complete description of the way triple data is transformed into Property Graph data for storage in Neo4j in https://jesusbarrasa.wordpress.com/2016/06/07/importing-rdf-data-into-neo4j/[this post]. 
-You will also notice a terminology/vocabulary transformation applied by default. The URIs identifying the elments in the RDF data (resources, properties, etc) have their namespace part shortened to make them more human readable and easier to query with Cypher. 
+The first thing we notice is that dataType properties in your RDF have been converted into node properties and object properties are now relationships connecting nodes.
+Every node represents a resource and has a property with its uri.
+Similarly, rdf:type statements are transformed into node labels.
+That's pretty much it but if you are interested, there is a complete description of the way triple data is transformed into Property Graph data for storage in Neo4j in https://jesusbarrasa.wordpress.com/2016/06/07/importing-rdf-data-into-neo4j/[this post].
+You will also notice a terminology/vocabulary transformation applied by default.
+The URIs identifying the elements in the RDF data (resources, properties, etc) have their namespace part shortened to make them more human readable and easier to query with Cypher.
 
-In our example, `http://neo4j.org/vocab/sw#name` has been shortened to `ns0\_\_name` (notice the double underscore separator used between the prefix and teh local name in the URI). Similarly, `http://www.w3.org/1999/02/22-rdf-syntax-ns#type` would be shortened to `rdf\_\_type` and so on...
+In our example, `http://neo4j.org/vocab/sw#name` has been shortened to `neo4voc\_\_name` (notice the double underscore separator used between the prefix and teh local name in the URI).
+Similarly, `http://www.w3.org/1999/02/22-rdf-syntax-ns#type` would be shortened to `rdf\_\_type` and so on...
 
-Prefixes for custom namespaces are assigned sequentially (`ns0`, `ns1`, etc) as they appear in the imported RDF. This is the default behavior but we'll see later on that it is possible to control that, and use custom prefixes. More details in section <<custom_ns>>.
+Prefixes explicitly defined in the RDF document are added to the graph's namespace mapping (provided that no mapping for the URI already exists).
+Prefixes for non-shortened URIs are assigned sequentially (`ns0`, `ns1`, etc) as they appear in the imported RDF.
+This is the default behavior but we'll see later on that it is possible to control that, and use custom prefixes.
+More details in section <<custom_ns>>.
 
 Keeping namespaces can be important if you care about being able to regenerate the imported RDF as we will see in section <<Export>>. If you don't care about that, you can ignore the namespaces by setting the `handleVocabUris` parameter to `'IGNORE'` and namespaces will be lost on import. If you run the import with this setting only the local names of URIs will be kept. Here's what that would look like:
 
@@ -623,7 +631,9 @@ Of course you could do achieve this -or something similar- in different ways, th
 [#custom_ns]
 === Defining custom prefixes for namespaces
 
-When applying url shortening on RDF ingestion (either explicitly or implicitly), we have the option of letting neosemantics automatically assign prefixes to namespaces as they appear in the imported RDF. But before doing that, a few popular ones will be set with familiar prefixes. These include `"http://www.w3.org/1999/02/22-rdf-syntax-ns#"` prefixed as `rdf` and `"http://www.w3.org/2004/02/skos/core#"` prefixed as `skos`.
+When applying url shortening on RDF ingestion (either explicitly or implicitly), we have the option of letting neosemantics automatically assign prefixes to namespaces as they appear in the imported RDF or inherit the ones defined in the RDF document (provided that the mapped namespaces are not already part of the graph's namespace mapping).
+But before doing that, a few popular ones will be set with familiar prefixes.
+These include `"http://www.w3.org/1999/02/22-rdf-syntax-ns#"` prefixed as `rdf` and `"http://www.w3.org/2004/02/skos/core#"` prefixed as `skos`.
 
 At any point you can check the prefixes in use by running the `listNamespacePrefixes` procedure.
 
